@@ -31,10 +31,9 @@ router.post("/login", async (req, res) => {
   const { username, phone_hash } = req.body;
 
   try {
-    const result = await pool.query(`
-      SELECT * FROM users WHERE username = $1,
-      [username]
-    `);
+    const result = await pool.query("SELECT * FROM users WHERE username = $1", [
+      username,
+    ]);
 
     const user = result.row[0];
     if (!user) return res.status(400).json({ error: "User not found" });

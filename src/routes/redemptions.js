@@ -3,22 +3,30 @@ const router = express.Router();
 const { pool } = require("../config/db");
 const auth = require("../middleware/auth");
 
-// Redeem points for a reward
+
+// POST /redemptions → Redeem a reward
+
 router.post("/", auth, async (req, res) => {
   const { reward_id } = req.body;
   const user_id = req.user.user_id;
 
   try {
+    // Validate reward_id
+    if (!reward_id || isNaN(reward_id)) {
+      return res.status(400).json({ error: "Valid reward_id is required" });
+    }
+
     // 1. Check user exists
     const userResult = await pool.query(
       `SELECT total_points FROM users WHERE user_id = $1`,
       [user_id]
     );
 
-    if (userResult.rows.length === 0)
+    if (userResult.rows.length === 0) {
       return res.status(400).json({ error: "User not found" });
+    }
 
-    const userPoints = userResult.row[0].total_points;
+    const userPoints = userResult.rows[0].total_points;
 
     // 2. Check reward exists and is active
     const rewardResult = await pool.query(
@@ -27,16 +35,19 @@ router.post("/", auth, async (req, res) => {
        WHERE reward_id = $1 AND active = TRUE`,
       [reward_id]
     );
-    if (rewardResult.rows.length === 0)
+
+    if (rewardResult.rows.length === 0) {
       return res.status(400).json({ error: "Reward not found or inactive" });
+    }
 
     const requiredPoints = rewardResult.rows[0].required_points;
 
     // 3. Check if user has enough points
-    if (userPoints < requiredPoints)
+    if (userPoints < requiredPoints) {
       return res.status(400).json({ error: "Not enough points" });
+    }
 
-    // 4. Insert into Redemptions
+    // 4. Insert redemption record
     await pool.query(
       `INSERT INTO redemptions (user_id, reward_id, redeemed_at)
        VALUES ($1, $2, NOW())`,
@@ -56,17 +67,27 @@ router.post("/", auth, async (req, res) => {
       points_deducted: requiredPoints,
     });
   } catch (err) {
-    console.error(err);
+    console.error("Redemption error:", err);
     res.status(500).json({ error: err.message });
   }
 });
 
-// Get all redemptions for a user
+
+// GET /redemptions/:user_id → Get user's redemption history
+
 router.get("/:user_id", auth, async (req, res) => {
   const user_id = parseInt(req.params.user_id);
+
+  // Validate user_id
+  if (isNaN(user_id)) {
+    return res.status(400).json({ error: "Invalid user_id" });
+  }
+
+  // Access control
   if (req.user.user_id !== user_id) {
     return res.status(403).json({ error: "Access denied" });
   }
+
   try {
     const result = await pool.query(
       `SELECT r.redemption_id, rw.reward_name, rw.required_points, r.redeemed_at
@@ -79,7 +100,7 @@ router.get("/:user_id", auth, async (req, res) => {
 
     res.json(result.rows);
   } catch (err) {
-    console.error(err);
+    console.error("Get redemptions error:", err);
     res.status(500).json({ error: err.message });
   }
 });

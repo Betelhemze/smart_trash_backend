@@ -15,31 +15,49 @@ const calculatePoints = (trash_type, item_count) => {
 };
 
 // POST /trashdrops → Record a new trash drop
-router.post("/",auth, async (req, res) => {
+router.post("/", auth, async (req, res) => {
   const { bin_id, trash_type, item_count } = req.body;
   const user_id = req.user.user_id;
 
   try {
+    // Validate inputs
+    if (!bin_id) {
+      return res.status(400).json({ error: "Bin ID is required" });
+    }
+
+    const validTypes = ["metal", "wet", "dry", "plastic"];
+    if (!validTypes.includes(trash_type)) {
+      return res.status(400).json({ error: "Invalid trash type" });
+    }
+
+    if (!item_count || item_count <= 0) {
+      return res
+        .status(400)
+        .json({ error: "Item count must be greater than 0" });
+    }
+
     // 1. Check if user exists
     const userCheck = await pool.query(
-      `SELECT * FROM users WHERE user_id = $1`,
+      "SELECT * FROM users WHERE user_id = $1",
       [user_id]
     );
-    if (userCheck.rows.length === 0)
+    if (userCheck.rows.length === 0) {
       return res.status(400).json({ error: "User not found" });
+    }
 
     // 2. Check if bin exists and is active
     const binCheck = await pool.query(
-      `SELECT * FROM smartbins WHERE bin_id = $1 AND status = 'active'`,
+      "SELECT * FROM smartbins WHERE bin_id = $1 AND status = 'active'",
       [bin_id]
     );
-    if (binCheck.rows.length === 0)
+    if (binCheck.rows.length === 0) {
       return res.status(400).json({ error: "Bin not found or inactive" });
+    }
 
     // 3. Calculate points earned
     const points_earned = calculatePoints(trash_type, item_count);
 
-    // 4. Insert into TrashDrops
+    // 4. Insert into trashdrops
     await pool.query(
       `INSERT INTO trashdrops (user_id, bin_id, trash_type, item_count, points_earned)
        VALUES ($1, $2, $3, $4, $5)`,
@@ -54,12 +72,16 @@ router.post("/",auth, async (req, res) => {
       [points_earned, user_id]
     );
 
-    res.status(201).json({ message: "Trash drop recorded", points_earned });
+    res.status(201).json({
+      message: "Trash drop recorded successfully",
+      points_earned,
+    });
   } catch (err) {
-    console.error(err);
+    console.error("Trash drop error:", err);
     res.status(500).json({ error: err.message });
   }
 });
+
 
 // GET /trashdrops/:user_id → Get all drops of a user
 router.get("/:user_id", async (req, res) => {
